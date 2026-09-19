@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=DankFM
+GenericName=File Manager
+Comment=Miller-column file manager for the dank desktop
+Exec=dfm open %u
+Icon=com.danklinux.dankfm
+Terminal=false
+Categories=System;FileTools;FileManager;Qt;
+Keywords=files;file manager;browser;explorer;folder;directory;columns;
+MimeType=inode/directory;
+StartupNotify=true
+StartupWMClass=com.danklinux.dankfm
+SingleMainWindow=true

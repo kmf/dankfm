@@ -1,0 +1,9 @@
+core/bin/
+core/internal/shellembed/dist/
+builddir/
+repo/
+.flatpak-builder/
+.qmlls.ini
+quickshell/.qmlls.ini
+*.qmlc
+*.jsc
