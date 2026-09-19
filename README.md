@@ -6,13 +6,75 @@ A miller-column file manager for the Dank Linux suite, built with
 The `dfm` binary embeds the UI. A copy dropped into any directory runs without
 the source tree. Closing the window hides it; `dfm kill` quits.
 
-```
-git clone --recurse-submodules git@github.com:kmf/dankfm.git
+## Requirements
+
+Building requires Go 1.26 or newer, GNU Make, Git, and `tar`. Clone the
+repository with its Dank QML Common submodule:
+
+```sh
+git clone --recurse-submodules https://github.com/kmf/dankfm.git
 cd dankfm
-make            # builds dfm with the UI embedded
-make run        # development: dfm run -c ./quickshell
-make check      # QML config loads without warnings
+```
+
+If the repository was cloned without submodules, initialize them separately:
+
+```sh
+git submodule update --init --recursive
+```
+
+Running DankFM requires Quickshell 0.3.1+, Qt 6 QML with
+`Qt.labs.folderlistmodel`, `gio`, `xdg-utils`, `gtk-launch`, and Git.
+`ffmpegthumbnailer` is optional and enables video thumbnails.
+
+## Build
+
+Build the standalone binary with the QML interface embedded:
+
+```sh
+make
+./core/bin/dfm
+```
+
+The output is `core/bin/dfm`. It does not need the source tree at runtime.
+Use `make clean` to remove generated build files.
+
+For development, build the faster non-embedded binary and run it against the
+live `quickshell/` tree:
+
+```sh
+make run
+```
+
+Before submitting changes, run the available checks:
+
+```sh
 make test       # Go tests
+make vet        # Go static analysis
+make check      # load the QML configuration and fail on warnings
+```
+
+`make check` requires the `qs` executable and GNU `timeout`.
+
+## Install
+
+After building, install the binary, desktop entry, icon, and AppStream metadata:
+
+```sh
+sudo make install
+```
+
+The default prefix is `/usr/local`. Override it when needed, or use `DESTDIR`
+for package staging:
+
+```sh
+make PREFIX="$HOME/.local" install
+make DESTDIR=/tmp/dankfm-package PREFIX=/usr install
+```
+
+Remove files installed under the same prefix with:
+
+```sh
+sudo make uninstall
 ```
 
 ```
@@ -25,10 +87,6 @@ dfm run -d --hidden # daemon, window hidden
 
 `dfm -c <dir>` or `DANKFM_SHELL_DIR` uses a live `shell.qml` tree instead of
 the embed.
-
-Requires Quickshell 0.3.1+, Qt 6 QML (`Qt.labs.folderlistmodel`), `gio`,
-`xdg-utils`, `gtk-launch`, and `git`. Optional:
-`ffmpegthumbnailer` for video thumbnails.
 
 The UI follows `~/.cache/DankMaterialShell/dms-colors.json` when present.
 
