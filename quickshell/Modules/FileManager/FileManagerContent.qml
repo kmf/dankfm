@@ -1192,6 +1192,7 @@ FocusScope {
                     bookmarks.remove(path);
                     root.takeFocus();
                 }
+                onEmptyTrashRequested: root.askEmptyTrash()
             }
 
             Column {

@@ -135,7 +135,11 @@ QtObject {
     }
 
     function empty() {
-        run(["gio", "trash", "--empty"], I18n.tr("Could not empty the trash"));
+        // Like restore(), do not depend on the optional GVfs trash backend.
+        // Clear both halves of the XDG trash so no orphaned payloads or
+        // metadata remain, while leaving the trash directories themselves.
+        const script = 'for dir in "$1/files" "$1/info"; do [ ! -d "$dir" ] || find "$dir" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + || exit; done';
+        run(["sh", "-c", script, "sh", trashDir], I18n.tr("Could not empty the trash"));
     }
 
     function run(command, errorMessage) {

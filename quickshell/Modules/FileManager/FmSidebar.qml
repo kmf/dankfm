@@ -1,5 +1,6 @@
 import QtCore
 import QtQuick
+import QtQuick.Controls
 import qs.DankCommon.Common
 import qs.DankCommon.Widgets
 
@@ -12,6 +13,14 @@ Rectangle {
 
     signal locationSelected(string path)
     signal bookmarkRemoved(string path)
+    signal emptyTrashRequested
+
+    function openTrashMenu(parentItem, localX, localY) {
+        const point = parentItem.mapToItem(root, localX, localY);
+        trashMenu.x = Math.max(0, Math.min(root.width - trashMenu.width, point.x));
+        trashMenu.y = Math.max(0, Math.min(root.height - trashMenu.height, point.y));
+        trashMenu.open();
+    }
 
     function localPath(location) {
         return StandardPaths.writableLocation(location).toString().replace("file://", "");
@@ -153,9 +162,17 @@ Rectangle {
                             id: itemHover
 
                             anchors.fill: parent
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.locationSelected(parent.modelData.path)
+                            onClicked: mouse => {
+                                if (mouse.button === Qt.RightButton) {
+                                    if (parent.modelData.path === root.trashPath)
+                                        root.openTrashMenu(itemHover, mouse.x, mouse.y);
+                                    return;
+                                }
+                                root.locationSelected(parent.modelData.path);
+                            }
                         }
 
                         DankActionButton {
@@ -169,6 +186,80 @@ Rectangle {
                             onClicked: root.bookmarkRemoved(parent.modelData.path)
                         }
                     }
+                }
+            }
+        }
+    }
+
+    Popup {
+        id: trashMenu
+
+        width: 184
+        height: actionRow.implicitHeight + Style.spacingS * 2
+        padding: Style.spacingS
+        modal: false
+        z: 200
+        closePolicy: Popup.CloseOnEscape
+
+        onOpened: outsideClickTimer.start()
+        onClosed: closePolicy = Popup.CloseOnEscape
+
+        Timer {
+            id: outsideClickTimer
+
+            interval: 100
+            onTriggered: trashMenu.closePolicy = Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        }
+
+        background: Rectangle {
+            color: Style.floatingSurface
+            radius: Style.cornerRadius
+            border.color: Style.withAlpha(Style.outline, 0.08)
+            border.width: 1
+        }
+
+        contentItem: Rectangle {
+            id: actionRow
+
+            implicitHeight: 32
+            radius: Style.cornerRadius
+            color: actionArea.containsMouse ? Style.withAlpha(Style.error, 0.12) : "transparent"
+
+            Row {
+                anchors.left: parent.left
+                anchors.leftMargin: Style.spacingS
+                anchors.right: parent.right
+                anchors.rightMargin: Style.spacingS
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Style.spacingS
+
+                DankIcon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: "delete_sweep"
+                    size: 16
+                    color: actionArea.containsMouse ? Style.error : Style.surfaceText
+                }
+
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width - 16 - Style.spacingS
+                    text: I18n.tr("Empty Trash…")
+                    font.pixelSize: Style.fontSizeSmall
+                    color: actionArea.containsMouse ? Style.error : Style.surfaceText
+                    wrapMode: Text.NoWrap
+                    elide: Text.ElideRight
+                }
+            }
+
+            MouseArea {
+                id: actionArea
+
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    trashMenu.close();
+                    root.emptyTrashRequested();
                 }
             }
         }
