@@ -23,6 +23,7 @@ Popup {
     property bool directoryMenu: false
 
     signal openRequested
+    signal openInNewTabRequested
     signal openWithRequested
     signal terminalRequested
     signal copyRequested
@@ -43,6 +44,12 @@ Popup {
             "icon": fileIsDir ? "folder_open" : "open_in_new",
             "visible": !directoryMenu,
             "action": () => root.fire(root.openRequested)
+        },
+        {
+            "text": I18n.tr("Open in New Tab"),
+            "icon": "tab_new_right",
+            "visible": !directoryMenu && fileIsDir,
+            "action": () => root.fire(root.openInNewTabRequested)
         },
         {
             "text": I18n.tr("Open with…"),

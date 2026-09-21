@@ -22,6 +22,8 @@ FocusScope {
 
     readonly property string homeDir: StandardPaths.writableLocation(StandardPaths.HomeLocation).toString().replace("file://", "")
 
+    readonly property string initialViewMode: ["columns", "list", "grid"].includes(Quickshell.env("DANKFILES_VIEW")) ? Quickshell.env("DANKFILES_VIEW") : "columns"
+
     property var columns: ancestorsOf(homeDir)
     property var selectedIndices: ancestorsOf(homeDir).map(() => 0)
     property int activeColumn: 0
@@ -32,7 +34,7 @@ FocusScope {
     signal settingsRequested
     // DANKFILES_VIEW=list|grid|columns picks the starting view, so a single view
     // can be iterated on without clicking through the switcher every launch.
-    property string viewMode: ["columns", "list", "grid"].includes(Quickshell.env("DANKFILES_VIEW")) ? Quickshell.env("DANKFILES_VIEW") : "columns"
+    property string viewMode: initialViewMode
     property string sortBy: "name"
     property bool sortAscending: true
 
@@ -49,9 +51,143 @@ FocusScope {
     readonly property string windowTitle: displayName(targetDir)
     readonly property string windowSubtitle: displayPath(targetDir)
 
-    // TODO(prototype): tabs, multi-select, the icon grid, the git block in the
-    // preview pane, REPOSITORIES/DEVICES sidebar sections and the Ctrl+K overlay
-    // are all still stubs. See README.md.
+    // TODO(prototype): the git block in the preview pane,
+    // REPOSITORIES/DEVICES sidebar sections and the Ctrl+K overlay are still
+    // stubs. See README.md.
+
+    // Tabs are snapshots of the navigation state already owned by this surface.
+    // Models and services stay shared, while paths, cursor/selection, view and
+    // sorting are restored atomically when a tab is activated.
+    property var tabs: []
+    property int activeTabIndex: -1
+    property int nextTabId: 1
+    property bool restoringTab: false
+
+    function copiedRevealTargets(source) {
+        const copy = {};
+        for (const directory of Object.keys(source || {})) {
+            copy[directory] = {
+                "target": source[directory].target,
+                "enter": source[directory].enter
+            };
+        }
+        return copy;
+    }
+
+    function blankTabState() {
+        return {
+            "id": nextTabId++,
+            "title": displayName(homeDir),
+            "columns": ancestorsOf(homeDir),
+            "selectedIndices": ancestorsOf(homeDir).map(() => 0),
+            "activeColumn": 0,
+            "viewMode": initialViewMode,
+            "sortBy": "name",
+            "sortAscending": true,
+            "multiSelection": [],
+            "revealTargets": {}
+        };
+    }
+
+    function saveActiveTabState() {
+        if (restoringTab || activeTabIndex < 0 || activeTabIndex >= tabs.length)
+            return;
+
+        const previous = tabs[activeTabIndex];
+        const next = tabs.slice();
+        next[activeTabIndex] = {
+            "id": previous.id,
+            "title": displayName(targetDir),
+            "columns": columns.slice(),
+            "selectedIndices": selectedIndices.slice(),
+            "activeColumn": activeColumn,
+            "viewMode": viewMode,
+            "sortBy": sortBy,
+            "sortAscending": sortAscending,
+            "multiSelection": multiSelection.slice(),
+            "revealTargets": copiedRevealTargets(revealTargets)
+        };
+        tabs = next;
+    }
+
+    function restoreTabState(index) {
+        if (index < 0 || index >= tabs.length)
+            return;
+
+        const tab = tabs[index];
+        restoringTab = true;
+        activeTabIndex = index;
+        columns = tab.columns.slice();
+        selectedIndices = tab.selectedIndices.slice();
+        activeColumn = Math.max(0, Math.min(tab.activeColumn, columns.length - 1));
+        viewMode = tab.viewMode;
+        sortBy = tab.sortBy;
+        sortAscending = tab.sortAscending;
+        multiSelection = tab.multiSelection.slice();
+        revealTargets = copiedRevealTargets(tab.revealTargets);
+        lastClickIndex = -1;
+        restoringTab = false;
+        ensureModels();
+        Qt.callLater(takeFocus);
+    }
+
+    function switchToTab(index) {
+        if (index === activeTabIndex || index < 0 || index >= tabs.length)
+            return;
+        saveActiveTabState();
+        restoreTabState(index);
+    }
+
+    function newTab(path) {
+        saveActiveTabState();
+        const next = tabs.concat([blankTabState()]);
+        tabs = next;
+        restoreTabState(next.length - 1);
+        navigateTo(path || homeDir);
+        saveActiveTabState();
+    }
+
+    function closeTab(index) {
+        if (tabs.length <= 1 || index < 0 || index >= tabs.length)
+            return;
+
+        saveActiveTabState();
+        const next = tabs.slice();
+        next.splice(index, 1);
+        tabs = next;
+
+        if (index === activeTabIndex) {
+            // Prefer the tab that slides into the closed tab's position; when
+            // closing the last tab, fall back to its left-hand neighbor.
+            restoreTabState(Math.min(index, next.length - 1));
+        } else if (index < activeTabIndex) {
+            activeTabIndex--;
+        }
+        takeFocus();
+    }
+
+    function moveTab(from, to) {
+        if (from < 0 || from >= tabs.length || to < 0 || to >= tabs.length || from === to)
+            return;
+        saveActiveTabState();
+        const next = tabs.slice();
+        const moved = next.splice(from, 1)[0];
+        next.splice(to, 0, moved);
+        tabs = next;
+        if (activeTabIndex === from)
+            activeTabIndex = to;
+        else if (from < activeTabIndex && to >= activeTabIndex)
+            activeTabIndex--;
+        else if (from > activeTabIndex && to <= activeTabIndex)
+            activeTabIndex++;
+        takeFocus();
+    }
+
+    function cycleTab(delta) {
+        if (tabs.length < 2)
+            return;
+        switchToTab((activeTabIndex + delta + tabs.length) % tabs.length);
+    }
 
     function encodeFileUrl(path) {
         if (!path)
@@ -242,9 +378,24 @@ FocusScope {
     readonly property int selectionCount: selectedEntries.length
     readonly property real selectionBytes: selectedEntries.reduce((total, entry) => total + (entry.isDir ? 0 : entry.size), 0)
 
-    onActiveColumnChanged: clearMultiSelection()
-    onSortByChanged: clearMultiSelection()
-    onSortAscendingChanged: clearMultiSelection()
+    onActiveColumnChanged: {
+        if (!restoringTab)
+            clearMultiSelection();
+        saveActiveTabState();
+    }
+    onSortByChanged: {
+        if (!restoringTab)
+            clearMultiSelection();
+        saveActiveTabState();
+    }
+    onSortAscendingChanged: {
+        if (!restoringTab)
+            clearMultiSelection();
+        saveActiveTabState();
+    }
+    onSelectedIndicesChanged: saveActiveTabState()
+    onMultiSelectionChanged: saveActiveTabState()
+    onViewModeChanged: saveActiveTabState()
 
     function clearMultiSelection() {
         if (multiSelection.length > 0)
@@ -774,6 +925,8 @@ FocusScope {
     // DANKFILES_PATH=<path> starts with that file or directory revealed, so a
     // specific case can be reproduced without navigating to it every launch.
     Component.onCompleted: {
+        tabs = [blankTabState()];
+        activeTabIndex = 0;
         const start = Quickshell.env("DANKFILES_PATH");
         if (start && start.startsWith("/")) {
             const target = start.replace(/\/$/, "");
@@ -783,10 +936,14 @@ FocusScope {
             navigateTo(homeDir);
         }
         ensureModels();
+        saveActiveTabState();
         takeFocus();
     }
 
-    onColumnsChanged: ensureModels()
+    onColumnsChanged: {
+        ensureModels();
+        saveActiveTabState();
+    }
 
     Keys.onPressed: event => {
         switch (event.key) {
@@ -850,7 +1007,17 @@ FocusScope {
                 return;
             break;
         case Qt.Key_T:
+            if (event.modifiers !== Qt.NoModifier) {
+                event.accepted = false;
+                return;
+            }
             openTerminal();
+            break;
+        case Qt.Key_W:
+            if (event.modifiers & Qt.ControlModifier)
+                closeTab(activeTabIndex);
+            else
+                return;
             break;
         case Qt.Key_B:
             bookmarks.toggle(targetDir);
@@ -926,6 +1093,36 @@ FocusScope {
         sequence: "Ctrl+,"
         enabled: !toolbar.pathEditMode && !nameDialog.opened
         onActivated: root.settingsRequested()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+T"
+        enabled: !toolbar.pathEditMode && !nameDialog.opened
+        onActivated: root.newTab()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Tab"
+        enabled: !toolbar.pathEditMode && !nameDialog.opened
+        onActivated: root.cycleTab(1)
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+Tab"
+        enabled: !toolbar.pathEditMode && !nameDialog.opened
+        onActivated: root.cycleTab(-1)
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+PgUp"
+        enabled: !toolbar.pathEditMode && !nameDialog.opened && root.activeTabIndex > 0
+        onActivated: root.moveTab(root.activeTabIndex, root.activeTabIndex - 1)
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+PgDown"
+        enabled: !toolbar.pathEditMode && !nameDialog.opened && root.activeTabIndex < root.tabs.length - 1
+        onActivated: root.moveTab(root.activeTabIndex, root.activeTabIndex + 1)
     }
 
     // Opt-in smoke test for the navigation model - see NavigationSelfTest.qml.
@@ -1087,6 +1284,7 @@ FocusScope {
             else
                 openProcess.startDetached(filePath);
         }
+        onOpenInNewTabRequested: root.newTab(filePath)
         onOpenWithRequested: root.askOpenWith(filePath, fileName)
         onTerminalRequested: root.openTerminalIn(fileIsDir ? filePath : fileOps.parentOf(filePath))
         onCopyRequested: root.copySelection()
@@ -1200,6 +1398,18 @@ FocusScope {
                 height: parent.height
                 spacing: 0
 
+                FmTabBar {
+                    id: tabBar
+
+                    width: parent.width
+                    tabs: root.tabs
+                    activeIndex: root.activeTabIndex
+                    onTabActivated: index => root.switchToTab(index)
+                    onTabClosed: index => root.closeTab(index)
+                    onNewTabRequested: root.newTab()
+                    onMoveRequested: (from, to) => root.moveTab(from, to)
+                }
+
                 FmToolbar {
                     id: toolbar
 
@@ -1253,7 +1463,7 @@ FocusScope {
                     id: viewArea
 
                     width: parent.width
-                    height: parent.height - toolbar.height - statusBar.height
+                    height: parent.height - tabBar.height - toolbar.height - statusBar.height
 
                     Row {
                         anchors.fill: parent

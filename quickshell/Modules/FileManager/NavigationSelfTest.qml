@@ -15,6 +15,12 @@ QtObject {
 
     property var target: null
     property int step: 0
+    property var firstTabState: null
+    property var secondTabState: null
+
+    function check(label, condition) {
+        console.log("SELFTEST", condition ? "PASS" : "FAIL", label);
+    }
 
     function tail(fm) {
         const last = fm.countAt(fm.activeColumn) - 1;
@@ -63,8 +69,44 @@ QtObject {
                 fm.clickEntry(0);
                 fm.clickEntry(0);
                 break;
-            default:
+            case 7:
                 console.log("SELFTEST dblclick", fm.currentDir, "activeColumn:", fm.activeColumn);
+                root.firstTabState = {
+                    "columns": JSON.stringify(fm.columns),
+                    "selectedIndices": JSON.stringify(fm.selectedIndices),
+                    "activeColumn": fm.activeColumn,
+                    "viewMode": fm.viewMode
+                };
+                fm.newTab();
+                root.check("new tab becomes active", fm.tabs.length === 2 && fm.activeTabIndex === 1);
+                break;
+            case 8:
+                fm.viewMode = fm.viewMode === "grid" ? "list" : "grid";
+                fm.moveSelection(1);
+                root.secondTabState = {
+                    "columns": JSON.stringify(fm.columns),
+                    "selectedIndices": JSON.stringify(fm.selectedIndices),
+                    "activeColumn": fm.activeColumn,
+                    "viewMode": fm.viewMode
+                };
+                fm.switchToTab(0);
+                break;
+            case 9:
+                root.check("first tab restores columns", JSON.stringify(fm.columns) === root.firstTabState.columns);
+                root.check("first tab restores selection", JSON.stringify(fm.selectedIndices) === root.firstTabState.selectedIndices && fm.activeColumn === root.firstTabState.activeColumn);
+                root.check("first tab restores view", fm.viewMode === root.firstTabState.viewMode);
+                fm.switchToTab(1);
+                break;
+            case 10:
+                root.check("second tab restores columns", JSON.stringify(fm.columns) === root.secondTabState.columns);
+                root.check("second tab restores selection", JSON.stringify(fm.selectedIndices) === root.secondTabState.selectedIndices && fm.activeColumn === root.secondTabState.activeColumn);
+                root.check("second tab restores view", fm.viewMode === root.secondTabState.viewMode);
+                fm.moveTab(1, 0);
+                root.check("active tab follows reorder", fm.activeTabIndex === 0);
+                fm.closeTab(0);
+                root.check("closing active chooses neighbor", fm.tabs.length === 1 && fm.activeTabIndex === 0);
+                break;
+            default:
                 running = false;
                 break;
             }

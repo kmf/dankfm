@@ -91,3 +91,9 @@ the embed.
 The UI follows `~/.cache/DankMaterialShell/dms-colors.json` when present.
 
 Copy, cut and paste act on the selection (`Ctrl+C` / `Ctrl+X` / `Ctrl+V`, and the context menu). Paste goes into the directory on screen. A name that already exists gets ` (copy)` rather than being overwritten. Cut/paste out of the trash is restore; paste into the trash is refused.
+
+Tabs keep their own location, view mode, selection and sort state. Use the tab
+strip or `Ctrl+T` to create a tab, `Ctrl+W` to close one, and `Ctrl+Tab` /
+`Ctrl+Shift+Tab` to switch. Reorder the active tab with the arrow buttons or
+`Ctrl+Shift+Page Up` / `Ctrl+Shift+Page Down`. A folder's context menu can open
+it directly in a new tab. At least one tab always remains open.
